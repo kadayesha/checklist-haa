@@ -414,7 +414,7 @@ function updateDots(){
   const dots=[];
   for(let i=6;i>=0;i--){
     const d=new Date(); d.setDate(d.getDate()-i);
-    const data=lsGetJSON(dayKey(d),{checked:[]});
+    const data=lsGetJSON(dayKey(d),null)||{checked:[]};
     const n=data.checked.length;
     const cls=n===7?'full':n>0?'part':'';
     const isToday=i===0;
@@ -428,10 +428,14 @@ function updateDots(){
 
 // ══════ STREAK ══════
 function updateStreak(){
-  let s=0,d=new Date();
-  while(true){
-    const data=lsGetJSON(dayKey(d),{checked:[]});
-    if(data.checked.length===7){s++;d.setDate(d.getDate()-1)}
+  let s=0;
+  const todayComplete=lsGetJSON(dayKey(new Date()),{checked:[]}).checked.length===7;
+  const d=new Date();
+  // If today not complete, start streak check from yesterday
+  if(!todayComplete) d.setDate(d.getDate()-1);
+  for(let i=0;i<365;i++){
+    const data=lsGetJSON(dayKey(d),null);
+    if(data&&data.checked.length===7){s++;d.setDate(d.getDate()-1);}
     else break;
   }
   document.getElementById('streakBadge').textContent=`🔥 ${s} Din Streak`;
@@ -475,6 +479,7 @@ function toggleHistLog(){
 
 // ══════ RESET ══════
 function resetDay(){
+  if(!confirm('Kya sach mein aaj ka data reset karna hai? Yeh action undo nahi hoga.'))return;
   state={checked:[]};saveState();
   renderCards();updateProgress();
   document.getElementById('compCard').classList.remove('show');
@@ -650,6 +655,52 @@ init();
 
 // Keep checking time every 20s
 setInterval(()=>{const r=loadRem();if(r.on)checkTime();},20000);
+
+// ── FIX: If page open across midnight, reload state for new day ──
+let _lastDate = new Date().toDateString();
+setInterval(()=>{
+  const now = new Date().toDateString();
+  if(now !== _lastDate){
+    _lastDate = now;
+    // New day — reload state fresh
+    state = lsGetJSON(todayKey(),{checked:[]});
+    renderCards();
+    updateProgress();
+    updateDots();
+    updateStreak();
+    updateDate();
+    document.getElementById('compCard').classList.remove('show');
+    toast('Naya din — checklist reset ho gayi!');
+  }
+}, 60000); // check every minute
+
+// Also re-check when tab becomes visible again (user returns to page)
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    const now = new Date().toDateString();
+    if(now !== _lastDate){
+      _lastDate = now;
+      state = lsGetJSON(todayKey(),{checked:[]});
+      renderCards();
+      updateProgress();
+      updateDots();
+      updateStreak();
+      updateDate();
+      document.getElementById('compCard').classList.remove('show');
+      toast('Naya din — checklist reset ho gayi!');
+    }
+    // Also re-sync state in case another tab updated it
+    const fresh = lsGetJSON(todayKey(),{checked:[]});
+    if(JSON.stringify(fresh)!==JSON.stringify(state)){
+      state=fresh;
+      renderCards();
+      updateProgress();
+      updateDots();
+      updateStreak();
+      if(state.checked.length===7) document.getElementById('compCard').classList.add('show');
+    }
+  }
+});
 </script>
 </body>
 </html>
